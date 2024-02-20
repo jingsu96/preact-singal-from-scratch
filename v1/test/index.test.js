@@ -18,5 +18,16 @@ describe('singal', () => {
       const s = signal(1);
       expect(s.peek()).toBe(1);
     });
+
+    test('should not trigger a read', () => {});
+  });
+
+  describe('.subscribe()', () => {
+    test('should subscribe to a singal', () => {
+      const s = signal(1);
+      const cb = jest.fn();
+      s.subscribe(cb);
+      expect(cb).toHaveBeenCalledWith(1);
+    });
   });
 });
