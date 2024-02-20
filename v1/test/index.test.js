@@ -12,4 +12,11 @@ describe('singal', () => {
     const s = signal(1);
     expect(s.toString()).toBe('1');
   });
+
+  describe('.peek()', () => {
+    test('should get value', () => {
+      const s = signal(1);
+      expect(s.peek()).toBe(1);
+    });
+  });
 });

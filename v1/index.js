@@ -9,6 +9,10 @@ export class Singal {
     return this._value;
   }
 
+  peek() {
+    return this._value;
+  }
+
   toString() {
     return '' + this._value;
   }
