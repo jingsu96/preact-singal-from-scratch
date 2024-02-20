@@ -8,6 +8,10 @@ export class Singal {
   get value() {
     return this._value;
   }
+
+  toString() {
+    return '' + this._value;
+  }
 }
 
 export const signal = (value) => {

@@ -7,4 +7,9 @@ describe('singal', () => {
     const s = signal(v);
     expect(s.value).toBe(v);
   });
+
+  test('should support .toString()', () => {
+    const s = signal(1);
+    expect(s.toString()).toBe('1');
+  });
 });
