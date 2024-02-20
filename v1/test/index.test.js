@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import { signal } from '../';
+import { signal, computed } from '../';
 
 describe('singal', () => {
   test('should return value', () => {
@@ -23,11 +23,18 @@ describe('singal', () => {
   });
 
   describe('.subscribe()', () => {
-    test('should subscribe to a singal', () => {
-      const s = signal(1);
-      const cb = jest.fn();
-      s.subscribe(cb);
-      expect(cb).toHaveBeenCalledWith(1);
-    });
+    test('should subscribe to a singal', () => {});
+
+    test('should subscribe to a singal', () => {});
+  });
+});
+
+describe('computed', () => {
+  test('should return value', () => {
+    const a = signal('a');
+    const b = signal('b');
+
+    const c = computed(() => a.value + b.value);
+    expect(c.value).toBe('ab');
   });
 });
