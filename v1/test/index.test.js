@@ -37,4 +37,25 @@ describe('computed', () => {
     const c = computed(() => a.value + b.value);
     expect(c.value).toBe('ab');
   });
+
+  test('[SELF] should throw error if computed value is readonly', () => {
+    const a = signal('a');
+    const b = signal('b');
+
+    const c = computed(() => a.value + b.value);
+    expect(() => {
+      c.value = 'c';
+    }).toThrow('Cannot write to a readonly signal');
+  });
+
+  test('should return updated value', () => {
+    const a = signal('a');
+    const b = signal('b');
+
+    const c = computed(() => a.value + b.value);
+    expect(c.value).toBe('ab');
+
+    a.value = 'c';
+    expect(c.value).toBe('cb');
+  });
 });

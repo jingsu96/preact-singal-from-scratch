@@ -1,3 +1,6 @@
+let currentSignal = null;
+const pending = new Set();
+
 export class Singal {
   /**
    * @description Set of signals that depend on this signal
@@ -19,6 +22,8 @@ export class Singal {
    */
   _readonly = false;
 
+  _pending = 0;
+
   _value;
 
   constructor(value) {
@@ -30,7 +35,34 @@ export class Singal {
       activate(this);
     }
 
+    if (!currentSignal) {
+      return this._value;
+    }
+
+    // subscribe the current computed to this signal:
+    this._subs.add(currentSignal);
+
+    // TODO dependency
+
     return this._value;
+  }
+
+  set value(value) {
+    if (this._readonly) {
+      throw new Error('Cannot write to a readonly signal');
+    }
+
+    if (this._value !== value) {
+      this._value = value;
+      pending.add(this);
+
+      if (this._pending === 0) {
+        mark(this);
+      }
+
+      // TODO: pending, and mark
+      sweep(pending);
+    }
   }
 
   peek() {
@@ -51,6 +83,10 @@ export class Singal {
   _updater() {
     // override me to handle updates
   }
+
+  _setCurrent() {
+    currentSignal = this;
+  }
 }
 
 export const signal = (value) => {
@@ -69,6 +105,38 @@ export const activate = (signal) => {
   signal._updater();
 };
 
+const mark = (signal) => {
+  if (signal._pending++ === 0) {
+    signal._subs.forEach((sub) => {
+      mark(sub);
+    });
+  }
+};
+
+/**
+ * updated computed value
+ *
+ * -> add signal itself to the pending
+ *    -> mark itself and all the subs as pending
+ * -> sweep the pending
+ *   -> for each pending signal
+ *      -> if signal is pending
+ *       -> decrease pending count
+ *       -> invoke updater
+ */
+
+const sweep = (subs) => {
+  subs.forEach((signal) => {
+    // pending
+    if (signal._pending > 0) {
+      // TODO: flag
+      signal._pending -= 1;
+      signal._updater();
+      sweep(signal._subs);
+    }
+  });
+};
+
 // t: computed (lazy)
 //    -> create new signal
 //    -> set to readonly
@@ -80,6 +148,8 @@ export const computed = (compute) => {
   const signal = new Singal();
   signal._readonly = true;
   function updater() {
+    signal._setCurrent();
+
     try {
       let ret = compute();
       signal._value = ret;
