@@ -36,8 +36,8 @@ describe('effect()', () => {
 
     effect(fn);
 
-    expect(fn).toBeCalled;
-    expect(fn).toReturn(123);
+    expect(fn).toHaveBeenCalled;
+    expect(fn).toHaveReturnedWith(123);
   });
 
   test('should subscribe to signals', () => {
@@ -45,16 +45,25 @@ describe('effect()', () => {
     const fn = vi.fn(() => s.value);
 
     effect(fn);
-
-    expect(fn).toBeCalled;
-    expect(fn).toReturn(123);
-
-    fn.mockReset();
+    fn.mockClear();
 
     s.value = 456;
 
-    expect(fn).toBeCalled;
-    expect(fn).toReturn(456);
+    expect(fn).toHaveBeenCalled;
+    expect(fn).toHaveReturnedWith(456);
+  });
+
+  test('should subscribe to multiple signals', () => {
+    const a = signal(1);
+    const b = signal(2);
+    const fn = vi.fn(() => a.value + b.value);
+
+    effect(fn);
+    fn.mockClear();
+
+    a.value = 2;
+    b.value = 4;
+    expect(fn).toHaveReturnedWith(6);
   });
 });
 
