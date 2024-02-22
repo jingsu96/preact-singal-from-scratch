@@ -1,5 +1,6 @@
-import { expect, test, describe } from 'vitest';
-import { signal, computed } from '../';
+import { expect, test, describe, vi } from 'vitest';
+import { signal, computed, effect } from '../';
+import { MockedFunction } from 'vitest';
 
 describe('singal', () => {
   test('should return value', () => {
@@ -24,8 +25,19 @@ describe('singal', () => {
 
   describe('.subscribe()', () => {
     test('should subscribe to a singal', () => {});
-
     test('should subscribe to a singal', () => {});
+  });
+});
+
+describe('effect()', () => {
+  test('should init with value', () => {
+    const s = signal(123);
+    const fn = vi.fn(() => s.value);
+
+    effect(fn);
+
+    expect(fn).toBeCalled;
+    expect(fn).toReturn(123);
   });
 });
 

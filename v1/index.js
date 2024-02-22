@@ -105,8 +105,12 @@ export const activate = (signal) => {
   signal._updater();
 };
 
+/**
+ * Mark a signal and its dependencies as pending
+ */
 const mark = (signal) => {
-  if (signal._pending++ === 0) {
+  signal._pending = signal._pending + 1;
+  if (signal._pending === 1) {
     signal._subs.forEach((sub) => {
       mark(sub);
     });
@@ -148,7 +152,7 @@ export const computed = (compute) => {
   const signal = new Singal();
   signal._readonly = true;
   function updater() {
-    signal._setCurrent();
+    signal._setCurrent(); // for re-compute
 
     try {
       let ret = compute();
@@ -158,4 +162,20 @@ export const computed = (compute) => {
 
   signal._updater = updater;
   return signal;
+};
+
+/**
+ * effect (eager)
+ *
+ * -> create a computed signal
+ *    -> activate the signal, since the computed is lazy
+ *
+ */
+export const effect = (fn) => {
+  // TODO: batch
+  const s = computed(() => fn());
+
+  activate(s);
+
+  // TODO destroy
 };
