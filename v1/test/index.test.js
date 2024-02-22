@@ -39,6 +39,23 @@ describe('effect()', () => {
     expect(fn).toBeCalled;
     expect(fn).toReturn(123);
   });
+
+  test('should subscribe to signals', () => {
+    const s = signal(123);
+    const fn = vi.fn(() => s.value);
+
+    effect(fn);
+
+    expect(fn).toBeCalled;
+    expect(fn).toReturn(123);
+
+    fn.mockReset();
+
+    s.value = 456;
+
+    expect(fn).toBeCalled;
+    expect(fn).toReturn(456);
+  });
 });
 
 describe('computed', () => {
