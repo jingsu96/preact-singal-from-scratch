@@ -31,13 +31,28 @@ describe('singal', () => {
       expect(s.peek()).toBe(1);
     });
 
-    // test('should not trigger a read', () => {
-    //   const s = signal(1);
-    //   const fn = vi.fn(() => s.peek());
-    //   effect(fn);
-    //   s.value = 2;
-    //   expect(fn).not.toHaveBeenCalled();
-    // });
+    test('should not trigger a read', () => {
+      const s = signal(1);
+      const fn = vi.fn(() => s.peek());
+      effect(fn);
+      s.value = 2;
+      expect(fn).toBeCalledTimes(1);
+    });
+
+    test('should refresh value if stale', () => {
+      const s = signal(1);
+      const s1 = computed(() => s.value + 1);
+
+      const dispose = effect(() => {
+        s1.value;
+      });
+
+      dispose();
+
+      s.value = 2;
+
+      expect(s1.peek()).toBe(3);
+    });
   });
 
   describe('.subscribe()', () => {
@@ -48,7 +63,19 @@ describe('singal', () => {
       s.subscribe(fn);
       expect(fn).toHaveBeenCalledWith(1);
     });
-    // test('should subscribe to a singal', () => {});
+
+    test('should subscribe to a singal', () => {
+      const fn = vi.fn();
+      const s = signal(1);
+
+      const dispose = s.subscribe(fn);
+
+      dispose();
+      fn.mockClear();
+
+      s.value = 2;
+      expect(fn).not.toBeCalled(2);
+    });
   });
 });
 
@@ -99,7 +126,6 @@ describe('effect()', () => {
     const y = signal(456);
     const fn = vi.fn(() => s.value + y.value);
     const dispose = effect(fn);
-    console.log(dispose.toString());
 
     fn.mockClear();
     dispose();
@@ -107,6 +133,18 @@ describe('effect()', () => {
 
     s.value = 456;
     y.value = 789;
+    expect(fn).not.toBeCalled();
+  });
+
+  test('should unsubscribe from signals', () => {
+    const s = signal(123);
+    const fn = vi.fn(() => s.value);
+    const dispose = effect(fn);
+
+    fn.mockClear();
+    dispose();
+
+    s.value = 456;
     expect(fn).not.toBeCalled();
   });
 });
