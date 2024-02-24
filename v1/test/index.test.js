@@ -1,7 +1,18 @@
 import { expect, test, describe, vi } from 'vitest';
 import { signal, computed, effect } from '../';
-import { MockedFunction } from 'vitest';
 
+/**
+ * signal
+ *   -> initialize a new signal with the value
+ *      -> some internal properties
+ *          -> getter
+ *             -> if not active, activate (call the updater)
+ *             -> if there has a current signal, add the current signal to the subs, means the current signal is depend on this signal
+ *             -> return value
+ *          -> setter
+ *             -> if readonly, throw error
+ *             -> if value is not equal to new value, set the value to new value, add to pending, and mark
+ */
 describe('singal', () => {
   test('should return value', () => {
     const v = [1, 2];
@@ -20,15 +31,32 @@ describe('singal', () => {
       expect(s.peek()).toBe(1);
     });
 
-    test('should not trigger a read', () => {});
+    // test('should not trigger a read', () => {
+    //   const s = signal(1);
+    //   const fn = vi.fn(() => s.peek());
+    //   effect(fn);
+    //   s.value = 2;
+    //   expect(fn).not.toHaveBeenCalled();
+    // });
   });
 
   describe('.subscribe()', () => {
-    test('should subscribe to a singal', () => {});
-    test('should subscribe to a singal', () => {});
+    test('should subscribe to a singal', () => {
+      const fn = vi.fn();
+      const s = signal(1);
+
+      s.subscribe(fn);
+      expect(fn).toHaveBeenCalledWith(1);
+    });
+    // test('should subscribe to a singal', () => {});
   });
 });
 
+/**
+ * effect (eager)
+ *   -> call the computed
+ *   -> immediately activate the computed
+ */
 describe('effect()', () => {
   test('should init with value', () => {
     const s = signal(123);
@@ -36,7 +64,7 @@ describe('effect()', () => {
 
     effect(fn);
 
-    expect(fn).toHaveBeenCalled;
+    expect(fn).toHaveBeenCalled();
     expect(fn).toHaveReturnedWith(123);
   });
 
@@ -49,7 +77,7 @@ describe('effect()', () => {
 
     s.value = 456;
 
-    expect(fn).toHaveBeenCalled;
+    expect(fn).toHaveBeenCalled();
     expect(fn).toHaveReturnedWith(456);
   });
 
@@ -65,8 +93,32 @@ describe('effect()', () => {
     b.value = 4;
     expect(fn).toHaveReturnedWith(6);
   });
+
+  test('should dispose of subscription', () => {
+    const s = signal(123);
+    const y = signal(456);
+    const fn = vi.fn(() => s.value + y.value);
+    const dispose = effect(fn);
+    console.log(dispose.toString());
+
+    fn.mockClear();
+    dispose();
+    expect(fn).not.toBeCalled();
+
+    s.value = 456;
+    y.value = 789;
+    expect(fn).not.toBeCalled();
+  });
 });
 
+/**
+ * computed (lazy)
+ *    -> create a new signal, and set to readonly
+ *    -> set updater
+ *        -> set the signal to current signal (for re-compute)
+ *        -> try to compute the value (call the compute function), e.g. () => a.value + b.value
+ *        -> set the value to the signal
+ */
 describe('computed', () => {
   test('should return value', () => {
     const a = signal('a');

@@ -1,5 +1,6 @@
 let currentSignal = null;
 const pending = new Set();
+let oldDeps = new Set();
 
 export class Singal {
   /**
@@ -22,6 +23,9 @@ export class Singal {
    */
   _readonly = false;
 
+  _requiresUpdate = false;
+  _isComputing = false;
+
   _pending = 0;
 
   _value;
@@ -35,14 +39,14 @@ export class Singal {
       activate(this);
     }
 
-    if (!currentSignal) {
-      return this._value;
+    if (currentSignal) {
+      // subscribe the current computed to this signal:
+      // TODO dependency
+      this._subs.add(currentSignal);
+
+      currentSignal._deps.add(this);
+      oldDeps.delete(this);
     }
-
-    // subscribe the current computed to this signal:
-    this._subs.add(currentSignal);
-
-    // TODO dependency
 
     return this._value;
   }
@@ -54,6 +58,7 @@ export class Singal {
 
     if (this._value !== value) {
       this._value = value;
+      const isFirst = pending.size === 0;
       pending.add(this);
 
       if (this._pending === 0) {
@@ -61,7 +66,10 @@ export class Singal {
       }
 
       // TODO: pending, and mark
-      sweep(pending);
+      if (isFirst) {
+        sweep(pending);
+        pending.clear();
+      }
     }
   }
 
@@ -76,6 +84,10 @@ export class Singal {
     return '' + this._value;
   }
 
+  subscribe(fn) {
+    return effect(() => fn(this._value));
+  }
+
   /**
    * A custom update routine to run when this Signal's value changes.
    * @internal
@@ -85,13 +97,34 @@ export class Singal {
   }
 
   _setCurrent() {
+    let prevSignal = currentSignal;
+    let prevOldDeps = oldDeps;
     currentSignal = this;
+    oldDeps = this._deps;
+    this._deps = new Set();
+
+    // TODO: should unmark
+    return (shouldUnmark, shouldCleanup) => {
+      if (shouldUnmark) {
+        this._subs.forEach(unmark);
+      }
+
+      if (shouldCleanup) {
+        oldDeps.forEach((dep) => {
+          unsubscribe(this, dep);
+        });
+      }
+
+      oldDeps.clear();
+      oldDeps = prevOldDeps;
+      currentSignal = prevSignal;
+    };
   }
 }
 
-export const signal = (value) => {
+export function signal(value) {
   return new Singal(value);
-};
+}
 
 export const subscribe = (signal, to) => {
   signal._active = true;
@@ -99,24 +132,51 @@ export const subscribe = (signal, to) => {
   to._subs.add(signal);
 };
 
-export const activate = (signal) => {
+export function unsubscribe(signal, to) {
+  signal._deps.delete(to);
+  to._subs.delete(signal);
+
+  // TODO: cleanup nobody listen
+}
+
+// TODO: tmpPending
+function refreshStale(signal) {
+  pending.delete(signal);
+  signal._pending = 0;
+  signal._updater();
+
+  signal._subs.forEach((sub) => {
+    if (sub._pending > 0) {
+      if (sub._pending > 1) {
+        sub._pending--;
+      }
+    }
+  });
+}
+
+export function activate(signal) {
   signal._active = true;
   // TODO: refresh stale
-  signal._updater();
-};
+  refreshStale(signal);
+}
+
+function unmark(signal) {
+  if (!signal._requiresUpdate && signal._pending > 0 && --signal._pending === 0) {
+    signal._subs.forEach(unmark);
+  }
+}
 
 /**
  * Mark a signal and its dependencies as pending
  */
-const mark = (signal) => {
+function mark(signal) {
   signal._pending = signal._pending + 1;
   if (signal._pending === 1) {
     signal._subs.forEach((sub) => {
       mark(sub);
     });
   }
-};
-
+}
 /**
  * updated computed value
  *
@@ -129,17 +189,26 @@ const mark = (signal) => {
  *       -> invoke updater
  */
 
-const sweep = (subs) => {
+function sweep(subs) {
   subs.forEach((signal) => {
     // pending
     if (signal._pending > 0) {
-      // TODO: flag
-      signal._pending -= 1;
-      signal._updater();
-      sweep(signal._subs);
+      signal._requiresUpdate = true;
+
+      if (--signal._pending === 0) {
+        if (signal._isComputing) {
+          throw Error('Cycle detected');
+        }
+        // TODO: flag
+        signal._requiresUpdate = false;
+        signal._isComputing = true;
+        signal._updater();
+        signal._isComputing = false;
+        sweep(signal._subs);
+      }
     }
   });
-};
+}
 
 // t: computed (lazy)
 //    -> create new signal
@@ -148,21 +217,24 @@ const sweep = (subs) => {
 // get t.value
 //    -> invoke updater
 //    -> set new result
-export const computed = (compute) => {
+export function computed(compute) {
   const signal = new Singal();
   signal._readonly = true;
   function updater() {
-    signal._setCurrent(); // for re-compute
+    let finish = signal._setCurrent(); // for re-compute
 
     try {
       let ret = compute();
+      finish(signal._value === ret, true);
       signal._value = ret;
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   signal._updater = updater;
   return signal;
-};
+}
 
 /**
  * effect (eager)
@@ -171,11 +243,20 @@ export const computed = (compute) => {
  *    -> activate the signal, since the computed is lazy
  *
  */
-export const effect = (fn) => {
+export function effect(fn) {
   // TODO: batch
-  const s = computed(() => fn());
+  const s = computed(() => batch(fn));
 
   activate(s);
 
   // TODO destroy
-};
+  return () => s._setCurrent()(true, true);
+}
+
+export function batch(cb) {
+  // TODO: batch pending
+  try {
+    return cb();
+  } finally {
+  }
+}
