@@ -186,4 +186,96 @@ describe('computed', () => {
     a.value = 'c';
     expect(c.value).toBe('cb');
   });
+
+  test('should conditionally unsubscribe from signals', () => {
+    const a = signal('a');
+    const b = signal('b');
+    const cond = signal(true);
+    const fn = vi.fn(() => (cond.value ? a.value : b.value));
+
+    const c = computed(fn);
+    expect(c.value).toBe('a');
+    expect(fn).toBeCalledTimes(1);
+
+    cond.value = false;
+    expect(c.value).toBe('b');
+    expect(fn).toBeCalledTimes(2);
+
+    fn.mockClear();
+
+    a.value = 'aa';
+    expect(c.value).toBe('b');
+    expect(fn).not.toBeCalled();
+  });
+
+  describe('graph update', () => {
+    test('should run computeds once for mutliple dep changes', () => {
+      const a = signal('a');
+      const b = signal('b');
+
+      const fn = vi.fn(() => a.value + b.value);
+
+      const c = computed(fn);
+
+      expect(c.value).toBe('ab');
+      expect(fn).toBeCalledTimes(1);
+
+      fn.mockClear();
+      a.value = 'aa';
+
+      expect(fn).toBeCalledTimes(1);
+    });
+
+    test('should drop A -> B -> A updates', () => {
+      // make a graph
+      //    a
+      //   / \
+      //   b  c
+      //   |
+      //   d
+      //   |
+      //   e
+      const a = signal('a');
+      const b = computed(() => a.value + 'b');
+      const c = computed(() => a.value + 'c');
+      const d = computed(() => a.value + b.value);
+
+      const fn = vi.fn(() => 'd: ' + d.value);
+      const e = computed(fn);
+
+      e.value;
+
+      expect(fn).toHaveBeenCalledOnce();
+
+      fn.mockClear();
+
+      a.value = 'A';
+
+      expect(fn).toHaveBeenCalledOnce();
+    });
+
+    test('should only update every signal once (diamond graph)', () => {
+      // In this scenario "D" should only update once when "A" receives
+      // an update. This is sometimes referred to as the "diamond" scenario.
+      //     A
+      //   /   \
+      //  B     C
+      //   \   /
+      //     D
+
+      const a = signal('a');
+      const b = computed(() => a.value); // b depends on a
+      const c = computed(() => a.value); // c depends on a
+
+      const fn = vi.fn(() => b.value + ' ' + c.value); // d depends on b and c
+      const d = computed(fn);
+
+      expect(d.value).toBe('a a');
+      expect(fn).toBeCalledTimes(1);
+
+      a.value = 'aa';
+      expect(d.value).toBe('aa aa');
+      expect(fn).toBeCalledTimes(2);
+    });
+  });
 });
