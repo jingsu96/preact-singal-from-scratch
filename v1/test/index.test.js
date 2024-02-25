@@ -277,5 +277,177 @@ describe('computed', () => {
       expect(d.value).toBe('aa aa');
       expect(fn).toBeCalledTimes(2);
     });
+
+    test('should only update every signal once (diamond graph + tail)', () => {
+      // "E" will be likely updated twice if our mark+sweep logic is buggy.
+      //     A
+      //   /   \
+      //  B     C
+      //   \   /
+      //     D
+      //     |
+      //     E
+
+      const a = signal('a');
+      const b = computed(() => a.value); // b depends on a
+      const c = computed(() => a.value); // c depends on a
+
+      const fn = vi.fn(() => b.value + ' ' + c.value); // d depends on b and c
+      const d = computed(fn);
+
+      const fn2 = vi.fn(() => d.value + ' e');
+      const e = computed(fn2);
+
+      expect(e.value).toBe('a a e');
+      expect(fn).toBeCalledTimes(1);
+      expect(fn2).toBeCalledTimes(1);
+
+      a.value = 'aa';
+      expect(e.value).toBe('aa aa e');
+      expect(fn).toBeCalledTimes(2);
+      expect(fn2).toBeCalledTimes(2);
+    });
+
+    test('should only update every signal once (jagged diamond graph + tails', () => {
+      // "F" and "G" will be likely updated twice if our mark+sweep logic is buggy.
+      //     A
+      //   /   \
+      //  B     C
+      //  |     |
+      //  |     D
+      //   \   /
+      //     E
+      //   /   \
+      //  F     G
+
+      const a = signal('a');
+      const b = computed(() => a.value); // b depends on a
+      const c = computed(() => a.value); // c depends on a
+      const d = computed(() => c.value); // d depends on c
+
+      const eFn = vi.fn(() => b.value + ' ' + d.value); // e depends on b and d
+      const e = computed(eFn);
+
+      const fFn = vi.fn(() => e.value + ' f');
+      const f = computed(fFn);
+
+      const gFn = vi.fn(() => e.value + ' g');
+      const g = computed(gFn);
+
+      expect(f.value).toBe('a a f');
+      expect(fFn).toBeCalledTimes(1);
+      expect(g.value).toBe('a a g');
+      expect(gFn).toBeCalledTimes(1);
+
+      eFn.mockClear();
+      fFn.mockClear();
+      gFn.mockClear();
+
+      a.value = 'b';
+
+      expect(e.value).toBe('b b');
+      expect(eFn).toBeCalledTimes(1);
+      expect(f.value).toBe('b b f');
+      expect(fFn).toBeCalledTimes(1);
+      expect(g.value).toBe('b b g');
+      expect(gFn).toBeCalledTimes(1);
+
+      eFn.mockClear();
+      fFn.mockClear();
+      gFn.mockClear();
+
+      a.value = 'c';
+
+      expect(e.value).toBe('c c');
+      expect(eFn).toBeCalledTimes(1);
+      expect(f.value).toBe('c c f');
+      expect(fFn).toBeCalledTimes(1);
+      expect(g.value).toBe('c c g');
+      expect(gFn).toBeCalledTimes(1);
+
+      // top to bottom
+      expect(eFn).toHaveBeenCalledBefore(fFn);
+      // left to right
+      expect(fFn).toHaveBeenCalledBefore(gFn);
+    });
+
+    test('should only subscribe to signals listened to', () => {
+      const a = signal('a');
+      const b = computed(() => a.value);
+      const fn = vi.fn(() => a.value);
+
+      computed(fn);
+
+      expect(b.value).toBe('a');
+      expect(fn).not.toBeCalled();
+
+      a.value = 'aa';
+      expect(b.value).toBe('aa');
+      expect(fn).not.toBeCalled();
+    });
+
+    test('should only subscribe to signals listened to - 2', () => {
+      // Here both "B" and "C" are active in the beginnning, but
+      // "B" becomes inactive later. At that point it should
+      // not receive any updates anymore.
+      //    *A
+      //   /   \
+      // *B     D <- we don't listen to C
+      //  |
+      // *C
+
+      const a = signal('a');
+      const bfn = vi.fn(() => a.value);
+      const b = computed(bfn);
+
+      const cfn = vi.fn(() => b.value);
+      const c = computed(cfn);
+
+      const d = computed(() => a.value);
+
+      let result = '';
+      let unsub = effect(() => (result = c.value));
+
+      expect(result).toBe('a');
+      expect(d.value).toBe('a');
+
+      bfn.mockClear();
+      cfn.mockClear();
+      unsub();
+
+      a.value = 'aa';
+      expect(bfn).not.toBeCalled();
+      expect(cfn).not.toBeCalled();
+      expect(d.value).toBe('aa');
+    });
+
+    test('should ensure subs update even if one dep unmakred it', () => {
+      // In this scenario "C" always returns the same value. When "A"
+      // changes, "B" will update, then "C" at which point its update
+      // to "D" will be unmarked. But "D" must still update because
+      // "B" marked it. If "D" isn't updated, then we have a bug.
+      //     A
+      //   /   \
+      //  B     *C <- returns same value every time
+      //   \   /
+      //     D
+
+      const a = signal('a');
+      const b = computed(() => {
+        return a.value;
+      });
+      const c = computed(() => {
+        a.value;
+        return 'c';
+      });
+
+      const fn = vi.fn(() => b.value + c.value);
+      const d = computed(fn);
+
+      expect(d.value).toBe('ac');
+      fn.mockClear();
+      a.value = 'aa';
+      expect(fn).toReturnWith('aac');
+    });
   });
 });

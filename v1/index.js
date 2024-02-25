@@ -132,11 +132,16 @@ export const subscribe = (signal, to) => {
   to._subs.add(signal);
 };
 
-export function unsubscribe(signal, to) {
-  signal._deps.delete(to);
-  to._subs.delete(signal);
+export function unsubscribe(signal, from) {
+  signal._deps.delete(from);
+  from._subs.delete(signal);
 
-  // TODO: cleanup nobody listen
+  // cleanup nobody listen
+  // test: should only subscribe to signals listened to - 2
+  if (from._subs.size === 0) {
+    from._active = false;
+    from._deps.forEach((dep) => unsubscribe(from, dep));
+  }
 }
 
 // TODO: tmpPending
@@ -195,11 +200,11 @@ function sweep(subs) {
     if (signal._pending > 0) {
       signal._requiresUpdate = true;
 
+      // solve diamond problem, only update the signal once
       if (--signal._pending === 0) {
         if (signal._isComputing) {
           throw Error('Cycle detected');
         }
-        // TODO: flag
         signal._requiresUpdate = false;
         signal._isComputing = true;
         signal._updater();
